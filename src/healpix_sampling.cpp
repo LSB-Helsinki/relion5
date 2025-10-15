@@ -18,6 +18,9 @@
  * author citations must be preserved.
  ***************************************************************************/
 #include "src/healpix_sampling.h"
+#include <algorithm>
+#include <set>
+#include <utility>
 //#define DEBUG_SAMPLING
 //#define DEBUG_CHECKSIZES
 //#define DEBUG_HELICAL_ORIENTATIONAL_SEARCH
@@ -1059,14 +1062,12 @@ void HealpixSampling::selectOrientationsWithNonZeroPriorProbability(
 
         if (isRelax && pointer_psi_nonzeroprior.size() > 0 && pointer_psi_nonzeroprior.size() < psi_angles.size())
         {
-                pointer_psi_nonzeroprior.clear();
-                psi_prior.clear();
-                RFLOAT uniform_prior = 1. / psi_angles.size();
-                for (size_t ipsi = 0; ipsi < psi_angles.size(); ++ipsi)
-                {
-                        pointer_psi_nonzeroprior.push_back(static_cast<int>(ipsi));
-                        psi_prior.push_back(uniform_prior);
-                }
+                std::vector<int> requested_psi_indices = pointer_psi_nonzeroprior;
+                expandPsiWithSymmetryRelaxation(prior_rot, prior_tilt,
+                                pointer_dir_nonzeroprior,
+                                requested_psi_indices,
+                                pointer_psi_nonzeroprior,
+                                psi_prior);
         }
 
 	// If there were no directions at all, just select the single nearest one:
@@ -1517,14 +1518,12 @@ void HealpixSampling::selectOrientationsWithNonZeroPriorProbabilityFor3DHelicalR
 
         if (isRelax && pointer_psi_nonzeroprior.size() > 0 && pointer_psi_nonzeroprior.size() < psi_angles.size())
         {
-                pointer_psi_nonzeroprior.clear();
-                psi_prior.clear();
-                RFLOAT uniform_prior = 1. / psi_angles.size();
-                for (size_t ipsi = 0; ipsi < psi_angles.size(); ++ipsi)
-                {
-                        pointer_psi_nonzeroprior.push_back(static_cast<int>(ipsi));
-                        psi_prior.push_back(uniform_prior);
-                }
+                std::vector<int> requested_psi_indices = pointer_psi_nonzeroprior;
+                expandPsiWithSymmetryRelaxation(prior_rot, prior_tilt,
+                                pointer_dir_nonzeroprior,
+                                requested_psi_indices,
+                                pointer_psi_nonzeroprior,
+                                psi_prior);
         }
 
 	// If there were no directions at all, just select the single nearest one:
@@ -1961,8 +1960,8 @@ void HealpixSampling::getOrientations(long int idir, long int ipsi, int oversamp
 
 
 void HealpixSampling::pushbackOversampledPsiAngles(long int ipsi, int oversampling_order,
-		RFLOAT rot, RFLOAT tilt, std::vector<RFLOAT> &oversampled_rot,
-		std::vector<RFLOAT> &oversampled_tilt, std::vector<RFLOAT> &oversampled_psi)
+                RFLOAT rot, RFLOAT tilt, std::vector<RFLOAT> &oversampled_rot,
+                std::vector<RFLOAT> &oversampled_tilt, std::vector<RFLOAT> &oversampled_psi)
 {
 
 	if (oversampling_order == 0)
@@ -1987,9 +1986,89 @@ void HealpixSampling::pushbackOversampledPsiAngles(long int ipsi, int oversampli
 
 }
 
+int HealpixSampling::findClosestPsiIndex(RFLOAT psi) const
+{
+        if (psi_angles.empty())
+                return -1;
+
+        RFLOAT wrapped_psi = realWRAP(psi, 0., 360.);
+        RFLOAT best_diff = 1e9;
+        int best_idx = 0;
+        for (size_t idx = 0; idx < psi_angles.size(); ++idx)
+        {
+                RFLOAT diff = ABS(psi_angles[idx] - wrapped_psi);
+                if (diff > 180.)
+                        diff = ABS(diff - 360.);
+                if (diff < best_diff)
+                {
+                        best_diff = diff;
+                        best_idx = static_cast<int>(idx);
+                }
+        }
+        return best_idx;
+}
+
+void HealpixSampling::expandPsiWithSymmetryRelaxation(
+                RFLOAT prior_rot,
+                RFLOAT prior_tilt,
+                const std::vector<int> &pointer_dir_nonzeroprior,
+                const std::vector<int> &requested_psi_indices,
+                std::vector<int> &pointer_psi_nonzeroprior,
+                std::vector<RFLOAT> &psi_prior) const
+{
+        if (!isRelax || requested_psi_indices.empty() || R_repository_relax.empty())
+                return;
+
+        std::set<int> expanded_indices(requested_psi_indices.begin(), requested_psi_indices.end());
+
+        std::vector<std::pair<RFLOAT, RFLOAT> > directions_to_consider;
+        directions_to_consider.reserve(pointer_dir_nonzeroprior.empty() ? 1 : pointer_dir_nonzeroprior.size());
+        for (int dir_idx : pointer_dir_nonzeroprior)
+        {
+                if (dir_idx < 0 || dir_idx >= static_cast<int>(rot_angles.size()))
+                        continue;
+                directions_to_consider.push_back(std::make_pair(rot_angles[dir_idx], tilt_angles[dir_idx]));
+        }
+        if (directions_to_consider.empty())
+                directions_to_consider.push_back(std::make_pair(prior_rot, prior_tilt));
+
+        for (const auto &direction : directions_to_consider)
+        {
+                RFLOAT base_rot = direction.first;
+                RFLOAT base_tilt = direction.second;
+                for (int ipsi_idx : requested_psi_indices)
+                {
+                        if (ipsi_idx < 0 || ipsi_idx >= static_cast<int>(psi_angles.size()))
+                                continue;
+                        RFLOAT base_psi = psi_angles[ipsi_idx];
+                        for (size_t sym_idx = 0; sym_idx < R_repository_relax.size(); ++sym_idx)
+                        {
+                                RFLOAT sym_rot, sym_tilt, sym_psi;
+                                Euler_apply_transf(L_repository_relax[sym_idx], R_repository_relax[sym_idx],
+                                        base_rot, base_tilt, base_psi, sym_rot, sym_tilt, sym_psi);
+                                int mapped_idx = findClosestPsiIndex(sym_psi);
+                                if (mapped_idx >= 0)
+                                        expanded_indices.insert(mapped_idx);
+                        }
+                }
+        }
+
+        std::vector<int> new_indices(expanded_indices.begin(), expanded_indices.end());
+        if (new_indices.size() == requested_psi_indices.size())
+                return;
+
+        pointer_psi_nonzeroprior = new_indices;
+        psi_prior.assign(pointer_psi_nonzeroprior.size(), 0.);
+        if (!pointer_psi_nonzeroprior.empty())
+        {
+                RFLOAT uniform_prior = 1. / pointer_psi_nonzeroprior.size();
+                std::fill(psi_prior.begin(), psi_prior.end(), uniform_prior);
+        }
+}
+
 /* Calculate an angular distance between two sets of Euler angles */
 RFLOAT HealpixSampling::calculateAngularDistance(RFLOAT rot1, RFLOAT tilt1, RFLOAT psi1,
-		RFLOAT rot2, RFLOAT tilt2, RFLOAT psi2)
+                RFLOAT rot2, RFLOAT tilt2, RFLOAT psi2)
 {
 
 	if (is_3D)
