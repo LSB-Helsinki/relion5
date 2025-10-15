@@ -218,6 +218,15 @@ public:
     /* Add a single orientation */
     void addOneOrientation(RFLOAT rot, RFLOAT tilt, RFLOAT psi, bool do_clear = false);
 
+    int findClosestPsiIndex(RFLOAT psi) const;
+    void expandPsiWithSymmetryRelaxation(
+            RFLOAT prior_rot,
+            RFLOAT prior_tilt,
+            const std::vector<int> &pointer_dir_nonzeroprior,
+            const std::vector<int> &requested_psi_indices,
+            std::vector<int> &pointer_psi_nonzeroprior,
+            std::vector<RFLOAT> &psi_prior) const;
+
     /* Write all orientations as a sphere in a bild file
      * Mainly useful for debugging */
     void writeAllOrientationsToBild(FileName fn_bild, std::string rgb = "1 0 0", RFLOAT size = 0.025);
