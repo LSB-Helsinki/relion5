@@ -90,14 +90,12 @@ void HealpixSampling::initialise(
 		initialiseSymMats(fn_sym, pgGroup, pgOrder, R_repository, L_repository);
 
 		// Set up symmetry matrices for symmetry relax
-		if (fn_sym_relax != "")
-		{
-			if (fn_sym_relax[0] != 'C' && fn_sym_relax[0] != 'c')
-				REPORT_ERROR("Sorry, symmetry relaxation is currently available only for cyclic (Cn) point groups. For other symmetries, please see https://github.com/3dem/relion/issues/796.");
-			R_repository_relax.clear();
-			L_repository_relax.clear();
-			initialiseSymMats(fn_sym_relax, pgGroupRelaxSym, pgOrderRelaxSym, R_repository_relax, L_repository_relax);
-		}
+                if (fn_sym_relax != "")
+                {
+                        R_repository_relax.clear();
+                        L_repository_relax.clear();
+                        initialiseSymMats(fn_sym_relax, pgGroupRelaxSym, pgOrderRelaxSym, R_repository_relax, L_repository_relax);
+                }
 	}
 	else
 	{
@@ -692,13 +690,45 @@ RFLOAT HealpixSampling::calculateDeltaRot(Matrix1D<RFLOAT> my_direction, RFLOAT 
 	return fabs(ASIND(my_rot_direction(1)));
 }
 
+void HealpixSampling::computeSymRelaxPsiCenters(RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
+                std::vector<RFLOAT> &psi_centers) const
+{
+        psi_centers.clear();
+        psi_centers.push_back(realWRAP(prior_psi, 0., 360.));
+
+        if (!isRelax || R_repository_relax.size() <= 1)
+                return;
+
+        for (int i = 1; i < R_repository_relax.size(); i++)
+        {
+                RFLOAT rot_sym, tilt_sym, psi_sym;
+                Euler_apply_transf(L_repository_relax[i], R_repository_relax[i], prior_rot, prior_tilt, prior_psi,
+                                rot_sym, tilt_sym, psi_sym);
+                psi_sym = realWRAP(psi_sym, 0., 360.);
+
+                bool exists = false;
+                for (size_t j = 0; j < psi_centers.size(); j++)
+                {
+                        RFLOAT diff = ABS(psi_centers[j] - psi_sym);
+                        if (diff < 1e-6 || ABS(diff - 360.) < 1e-6)
+                        {
+                                exists = true;
+                                break;
+                        }
+                }
+
+                if (!exists)
+                        psi_centers.push_back(psi_sym);
+        }
+}
+
 void HealpixSampling::selectOrientationsWithNonZeroPriorProbability(
-		RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
-		RFLOAT sigma_rot, RFLOAT sigma_tilt, RFLOAT sigma_psi,
-    	std::vector<int> &pointer_dir_nonzeroprior, std::vector<RFLOAT> &directions_prior,
-    	std::vector<int> &pointer_psi_nonzeroprior, std::vector<RFLOAT> &psi_prior,
-		bool do_bimodal_search_psi,
-		RFLOAT sigma_cutoff, RFLOAT sigma_tilt_from_ninety, RFLOAT sigma_psi_from_zero)
+                RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
+                RFLOAT sigma_rot, RFLOAT sigma_tilt, RFLOAT sigma_psi,
+        std::vector<int> &pointer_dir_nonzeroprior, std::vector<RFLOAT> &directions_prior,
+        std::vector<int> &pointer_psi_nonzeroprior, std::vector<RFLOAT> &psi_prior,
+                bool do_bimodal_search_psi,
+                RFLOAT sigma_cutoff, RFLOAT sigma_tilt_from_ninety, RFLOAT sigma_psi_from_zero)
 {
 	pointer_dir_nonzeroprior.clear();
 	directions_prior.clear();
@@ -973,63 +1003,69 @@ void HealpixSampling::selectOrientationsWithNonZeroPriorProbability(
 	pointer_psi_nonzeroprior.clear();
 	psi_prior.clear();
 
-	RFLOAT sumprior = 0.;
-	RFLOAT sumprior_withsigmafromzero = 0.;
-	RFLOAT best_diff = 9999.;
-	long int best_ipsi = -999;
-	for (long int ipsi = 0; ipsi < psi_angles.size(); ipsi++)
-	{
-		bool is_nonzero_pdf = false;
-		// Sjors 12jul2017: for small tilt-angles, rot-angle may become anything, psi-angle then follows that
-		// Therefore, psi-prior may be completely wrong.... The following line would however be a very expensive fix....
-		//if (sigma_psi > 0. && prior_tilt > 10.)
-		if (sigma_psi > 0.)
-		{
-			RFLOAT diffpsi = ABS(psi_angles[ipsi] - prior_psi);
-			if (diffpsi > 180.)
-				diffpsi = ABS(diffpsi - 360.);
-			if (do_bimodal_search_psi && (diffpsi > 90.))
-				diffpsi = ABS(diffpsi - 180.);
+        std::vector<RFLOAT> psi_centers;
+        computeSymRelaxPsiCenters(prior_rot, prior_tilt, prior_psi, psi_centers);
 
-			// Only consider differences within sigma_cutoff * sigma_psi
-			if (diffpsi < sigma_cutoff * sigma_psi)
-			{
-				RFLOAT prior = gaussian1D(diffpsi, sigma_psi, 0.);
-				pointer_psi_nonzeroprior.push_back(ipsi);
-				psi_prior.push_back(prior);
-				sumprior += prior;
-				is_nonzero_pdf = true;
+        RFLOAT sumprior = 0.;
+        RFLOAT sumprior_withsigmafromzero = 0.;
+        RFLOAT best_diff = 9999.;
+        long int best_ipsi = -999;
+        for (long int ipsi = 0; ipsi < psi_angles.size(); ipsi++)
+        {
+                bool is_nonzero_pdf = false;
+                RFLOAT local_best_diff = 9999.;
+                // Sjors 12jul2017: for small tilt-angles, rot-angle may become anything, psi-angle then follows that
+                // Therefore, psi-prior may be completely wrong.... The following line would however be a very expensive fix....
+                //if (sigma_psi > 0. && prior_tilt > 10.)
+                if (sigma_psi > 0.)
+                {
+                        RFLOAT weight = 0.;
+                        for (size_t icenter = 0; icenter < psi_centers.size(); icenter++)
+                        {
+                                RFLOAT diffpsi = ABS(psi_angles[ipsi] - psi_centers[icenter]);
+                                if (diffpsi > 180.)
+                                        diffpsi = ABS(diffpsi - 360.);
+                                if (do_bimodal_search_psi && (diffpsi > 90.))
+                                        diffpsi = ABS(diffpsi - 180.);
 
-				// TMP DEBUGGING
-				if (prior == 0.)
-				{
-					std::cerr << " psi_angles[ipsi]= " << psi_angles[ipsi] << " prior_psi= " << prior_psi << std::endl;
-					std::cerr << " diffpsi= " << diffpsi << " sigma_cutoff= " << sigma_cutoff << " sigma_psi= " << sigma_psi << std::endl;
-					REPORT_ERROR("prior on psi is zero!");
-				}
+                                if (diffpsi < local_best_diff)
+                                        local_best_diff = diffpsi;
 
-			}
+                                if (diffpsi < sigma_cutoff * sigma_psi)
+                                {
+                                        RFLOAT prior = gaussian1D(diffpsi, sigma_psi, 0.);
+                                        weight += prior;
+                                }
+                        }
 
-			// Keep track of the nearest sampling point
-			if (diffpsi < best_diff)
-			{
-				best_ipsi = ipsi;
-				best_diff = diffpsi;
-			}
-		}
-		else
-		{
-			pointer_psi_nonzeroprior.push_back(ipsi);
-			psi_prior.push_back(1.);
-			sumprior += 1.;
-			is_nonzero_pdf = true;
-		}
+                        if (weight > 0.)
+                        {
+                                pointer_psi_nonzeroprior.push_back(ipsi);
+                                psi_prior.push_back(weight);
+                                sumprior += weight;
+                                is_nonzero_pdf = true;
+                        }
+                }
+                else
+                {
+                        pointer_psi_nonzeroprior.push_back(ipsi);
+                        psi_prior.push_back(1.);
+                        sumprior += 1.;
+                        is_nonzero_pdf = true;
+                        local_best_diff = 0.;
+                }
 
-		// For priors on deviations from 0 psi angles in multi-body refinement
-		if (sigma_psi_from_zero > 0. && is_nonzero_pdf)
-		{
-			long int mypos = pointer_psi_nonzeroprior.size() - 1;
-			// Check psi angle is within sigma_cutoff*sigma_psi_from_zero
+                if (local_best_diff < best_diff)
+                {
+                        best_ipsi = ipsi;
+                        best_diff = local_best_diff;
+                }
+
+                // For priors on deviations from 0 psi angles in multi-body refinement
+                if (sigma_psi_from_zero > 0. && is_nonzero_pdf)
+                {
+                        long int mypos = pointer_psi_nonzeroprior.size() - 1;
+                        // Check psi angle is within sigma_cutoff*sigma_psi_from_zero
 			RFLOAT diff_psi = psi_angles[ipsi];
 			if (diff_psi > 180.)
 				diff_psi -= 360.;
@@ -1432,75 +1468,84 @@ void HealpixSampling::selectOrientationsWithNonZeroPriorProbabilityFor3DHelicalR
 	pointer_psi_nonzeroprior.clear();
 	psi_prior.clear();
 
-	RFLOAT sumprior = 0.;
-	RFLOAT best_diff = 9999.;
-	long int best_ipsi = -999;
-	bool is_psi_flipped = false;
-	for (long int ipsi = 0; ipsi < psi_angles.size(); ipsi++)
-	{
-		if (sigma_psi > 0.)
-		{
-			RFLOAT diffpsi = ABS(psi_angles[ipsi] - prior_psi);
-			if (diffpsi > 180.)
-				diffpsi = ABS(diffpsi - 360.);
-			if (!do_auto_refine_local_searches)
-			{
-				if ( (prior_psi_flip_ratio > prior_psi_flip_ratio_thres_min) && (diffpsi > 90.))
-				{
-					diffpsi = ABS(diffpsi - 180.);
-					is_psi_flipped = true;
-				}
-			}
+        std::vector<RFLOAT> psi_centers;
+        computeSymRelaxPsiCenters(prior_rot, prior_tilt, prior_psi, psi_centers);
 
-			// Only consider differences within sigma_cutoff * sigma_psi
-			if (diffpsi < sigma_cutoff * sigma_psi)
-			{
-				RFLOAT prior = gaussian1D(diffpsi, sigma_psi, 0.);
-				if (!do_auto_refine_local_searches)
-				{
-					if (is_psi_flipped)
-						prior *= prior_psi_flip_ratio;
-					else
-						prior *= (1. - prior_psi_flip_ratio);
-				}
-				pointer_psi_nonzeroprior.push_back(ipsi);
-				psi_prior.push_back(prior);
-				sumprior += prior;
+        RFLOAT sumprior = 0.;
+        RFLOAT best_diff = 9999.;
+        long int best_ipsi = -999;
+        for (long int ipsi = 0; ipsi < psi_angles.size(); ipsi++)
+        {
+                RFLOAT local_best_diff = 9999.;
+                if (sigma_psi > 0.)
+                {
+                        RFLOAT weight = 0.;
+                        for (size_t icenter = 0; icenter < psi_centers.size(); icenter++)
+                        {
+                                RFLOAT diffpsi = ABS(psi_angles[ipsi] - psi_centers[icenter]);
+                                if (diffpsi > 180.)
+                                        diffpsi = ABS(diffpsi - 360.);
+
+                                bool local_flip = false;
+                                if (!do_auto_refine_local_searches)
+                                {
+                                        if ( (prior_psi_flip_ratio > prior_psi_flip_ratio_thres_min) && (diffpsi > 90.))
+                                        {
+                                                diffpsi = ABS(diffpsi - 180.);
+                                                local_flip = true;
+                                        }
+                                }
+
+                                if (diffpsi < local_best_diff)
+                                        local_best_diff = diffpsi;
+
+                                // Only consider differences within sigma_cutoff * sigma_psi
+                                if (diffpsi < sigma_cutoff * sigma_psi)
+                                {
+                                        RFLOAT prior = gaussian1D(diffpsi, sigma_psi, 0.);
+                                        if (!do_auto_refine_local_searches)
+                                        {
+                                                if (local_flip)
+                                                        prior *= prior_psi_flip_ratio;
+                                                else
+                                                        prior *= (1. - prior_psi_flip_ratio);
+                                        }
+                                        weight += prior;
+                                }
+                        }
+
+                        if (weight > 0.)
+                        {
+                                pointer_psi_nonzeroprior.push_back(ipsi);
+                                psi_prior.push_back(weight);
+                                sumprior += weight;
 #ifdef DEBUG_HELICAL_ORIENTATIONAL_SEARCH
-				std::cout << "psi OK, diffang = " << diffpsi << std::endl;
-				std::cout << " psi = " << psi_angles[ipsi] << std::endl;
+                                std::cout << "psi OK, diffang = " << local_best_diff << std::endl;
+                                std::cout << " psi = " << psi_angles[ipsi] << std::endl;
 #endif
-
-				// TMP DEBUGGING
-				if (prior == 0.)
-				{
-					std::cerr << " psi_angles[ipsi]= " << psi_angles[ipsi] << " prior_psi= " << prior_psi << std::endl;
-					std::cerr << " diffpsi= " << diffpsi << " sigma_cutoff= " << sigma_cutoff << " sigma_psi= " << sigma_psi << std::endl;
-					REPORT_ERROR("prior on psi is zero!");
-				}
-
-			}
-			else
-			{
+                        }
+                        else
+                        {
 #ifdef DEBUG_HELICAL_ORIENTATIONAL_SEARCH
-				std::cout << "psi FAILED, diffang = " << diffpsi << std::endl;
-				std::cout << " psi = " << psi_angles[ipsi] << std::endl;
+                                std::cout << "psi FAILED, diffang = " << local_best_diff << std::endl;
+                                std::cout << " psi = " << psi_angles[ipsi] << std::endl;
 #endif
-			}
-			// Keep track of the nearest sampling point
-			if (diffpsi < best_diff)
-			{
-				best_ipsi = ipsi;
-				best_diff = diffpsi;
-			}
-		}
-		else
-		{
-			pointer_psi_nonzeroprior.push_back(ipsi);
-			psi_prior.push_back(1.);
-			sumprior += 1.;
-		}
-	}
+                        }
+                }
+                else
+                {
+                        pointer_psi_nonzeroprior.push_back(ipsi);
+                        psi_prior.push_back(1.);
+                        sumprior += 1.;
+                        local_best_diff = 0.;
+                }
+
+                if (local_best_diff < best_diff)
+                {
+                        best_ipsi = ipsi;
+                        best_diff = local_best_diff;
+                }
+        }
 	// Normalise the prior probability distribution to have sum 1 over all psi-angles
 	for (long int ipsi = 0; ipsi < psi_prior.size(); ipsi++)
 		psi_prior[ipsi] /= sumprior;

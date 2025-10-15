@@ -369,12 +369,12 @@ public:
      * etc.
      */
     void pushbackOversampledPsiAngles(long int ipsi, int oversampling_order,
-    		RFLOAT rot, RFLOAT tilt, std::vector<RFLOAT> &oversampled_rot,
-    		std::vector<RFLOAT> &oversampled_tilt, std::vector<RFLOAT> &oversampled_psi);
+                RFLOAT rot, RFLOAT tilt, std::vector<RFLOAT> &oversampled_rot,
+                std::vector<RFLOAT> &oversampled_tilt, std::vector<RFLOAT> &oversampled_psi);
 
     /* Calculate an angular distance between two sets of Euler angles */
     RFLOAT calculateAngularDistance(RFLOAT rot1, RFLOAT tilt1, RFLOAT psi1,
-    		RFLOAT rot2, RFLOAT tilt2, RFLOAT psi2);
+                RFLOAT rot2, RFLOAT tilt2, RFLOAT psi2);
 
     /* Write a BILD file describing the angular distribution
      *  R determines the radius of the sphere on which cylinders will be placed
@@ -407,7 +407,10 @@ private:
     /* eliminate symmetry-related points based on simple geometrical considerations,
         symmetry group, symmetry order */
     void removeSymmetryEquivalentPointsGeometric(const int symmetry, int sym_order,
-												 std::vector <Matrix1D<RFLOAT> >  &sampling_points_vector);
+                                                                                                std::vector <Matrix1D<RFLOAT> >  &sampling_points_vector);
+
+    void computeSymRelaxPsiCenters(RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
+                std::vector<RFLOAT> &psi_centers) const;
 
 
 
