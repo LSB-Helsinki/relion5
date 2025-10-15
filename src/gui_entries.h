@@ -38,6 +38,7 @@
 #include <FL/Fl_Select_Browser.H>
 #include <FL/Fl_Menu_Bar.H>
 #include <FL/Fl_Menu_Button.H>
+#include <FL/Fl_Menu_.H>
 #include <FL/Fl_Choice.H>
 #include <FL/Fl_Toggle_Button.H>
 #include <FL/Fl_Widget.H>
@@ -199,6 +200,9 @@ public:
     Fl_Choice * choice;
     // The menu
     Fl_Menu_* menu;
+
+    // Optional helper menu for relax symmetry point group selection
+    Fl_Menu_Button* relax_sym_menu;
     // Deactivate this group
     Fl_Group * my_deactivate_group;
 	bool actually_activate;
@@ -220,8 +224,9 @@ public:
     	inp = NULL;
 		help = NULL;
 		browse = NULL;
-		choice = NULL;
-		menu = NULL;
+                choice = NULL;
+                menu = NULL;
+                relax_sym_menu = NULL;
 		my_deactivate_group = NULL;
 		actually_activate = false;
 		slider = NULL;
@@ -272,8 +277,12 @@ public:
     static void cb_slider(Fl_Widget*, void*);
     void cb_slider_i();
 
-    static void cb_input(Fl_Widget*, void*);
-    void cb_input_i();
+        static void cb_input(Fl_Widget*, void*);
+        void cb_input_i();
+
+        static void cb_relax_sym_menu(Fl_Widget*, void*);
+        void cb_relax_sym_menu_i(Fl_Menu_* menu_widget);
+        void setupRelaxSymMenu(int y, int height);
 
 };
 
