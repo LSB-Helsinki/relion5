@@ -104,12 +104,14 @@ bool create_scheduler_gui;
 void GuiEntry::initialise(int x, int y, Fl_Group * deactivate_this_group, bool _actually_activate, int height, int wcol2, int wcol3)
 {
 
-	// The input field
-	int mywidth = (joboption.joboption_type == JOBOPTION_SLIDER && !create_scheduler_gui) ? 50 : wcol2;
-	inp = new Fl_Input(x, y, mywidth, height, joboption.label_gui.c_str());
-	inp->color(GUI_INPUT_COLOR);
-	inp->textsize(ENTRY_FONTSIZE);
-	inp->labelsize(ENTRY_FONTSIZE);
+        relax_sym_menu = NULL;
+
+        // The input field
+        int mywidth = (joboption.joboption_type == JOBOPTION_SLIDER && !create_scheduler_gui) ? 50 : wcol2;
+        inp = new Fl_Input(x, y, mywidth, height, joboption.label_gui.c_str());
+        inp->color(GUI_INPUT_COLOR);
+        inp->textsize(ENTRY_FONTSIZE);
+        inp->labelsize(ENTRY_FONTSIZE);
 	inp->value(joboption.default_value.c_str());
 
 	// Display help button if needed
@@ -176,11 +178,11 @@ void GuiEntry::initialise(int x, int y, Fl_Group * deactivate_this_group, bool _
 			menu->textsize(ENTRY_FONTSIZE);
 		}
 	}
-	else if (joboption.joboption_type == JOBOPTION_SLIDER)
-	{
-		if (!create_scheduler_gui)
-		{
-			int floatwidth = 50;
+        else if (joboption.joboption_type == JOBOPTION_SLIDER)
+        {
+                if (!create_scheduler_gui)
+                {
+                        int floatwidth = 50;
 			// Slider is shorter than wcol2, so that underlying input field becomes visible
 			slider = new Fl_Slider(XCOL2 + floatwidth, y, wcol2 - floatwidth, height);
 			slider->type(1);
@@ -196,8 +198,10 @@ void GuiEntry::initialise(int x, int y, Fl_Group * deactivate_this_group, bool _
 			// Set the default in the input and the slider:
 			inp->value(joboption.default_value.c_str());
 			slider->value(textToDouble(joboption.default_value));
-		}
-	}
+                }
+        }
+
+        setupRelaxSymMenu(y, height);
 }
 void GuiEntry::place(JobOption &_joboption, int &y, int _deactivate_option, Fl_Group * deactivate_this_group, bool actually_activate, int x, int h, int wcol2, int wcol3 )
 {
@@ -440,15 +444,76 @@ void GuiEntry::cb_input(Fl_Widget* o, void* v) {
 
 
 void GuiEntry::cb_input_i() {
-	static int recurse = 0;
-	if ( recurse ) {
-		return;
-	} else {
+        static int recurse = 0;
+        if ( recurse ) {
+                return;
+        } else {
 		recurse = 1;
 
 		if (!create_scheduler_gui) slider->value(fltkTextToFloat(inp->value()));         // pass input's value to slider
-		recurse = 0;
-	}
+                recurse = 0;
+        }
+}
+
+void GuiEntry::setupRelaxSymMenu(int y, int height)
+{
+        if (create_scheduler_gui)
+                return;
+
+        if (joboption.label != "Relax symmetry:")
+                return;
+
+        relax_sym_menu = new Fl_Menu_Button(XCOL4, y, WCOL4, height, "Select");
+        relax_sym_menu->type(Fl_Menu_Button::POPUP3);
+        relax_sym_menu->color(GUI_BUTTON_COLOR);
+        relax_sym_menu->labelsize(ENTRY_FONTSIZE);
+        relax_sym_menu->textsize(ENTRY_FONTSIZE);
+
+        relax_sym_menu->add("Clear", 0, cb_relax_sym_menu, this, 0);
+
+        for (int n = 1; n <= 12; n++)
+        {
+                std::string label = "C" + integerToString(n);
+                relax_sym_menu->add(label.c_str(), 0, cb_relax_sym_menu, this, 0);
+        }
+
+        for (int n = 2; n <= 12; n++)
+        {
+                std::string label = "D" + integerToString(n);
+                relax_sym_menu->add(label.c_str(), 0, cb_relax_sym_menu, this, 0);
+        }
+
+        const char* platonic[] = {"O", "I1", "I2", "I3", "I4"};
+        for (int i = 0; i < 5; i++)
+        {
+                relax_sym_menu->add(platonic[i], 0, cb_relax_sym_menu, this, 0);
+        }
+}
+
+void GuiEntry::cb_relax_sym_menu(Fl_Widget* o, void* v)
+{
+        GuiEntry* T = static_cast<GuiEntry*>(v);
+        T->cb_relax_sym_menu_i(static_cast<Fl_Menu_*>(o));
+}
+
+void GuiEntry::cb_relax_sym_menu_i(Fl_Menu_* menu_widget)
+{
+        if (menu_widget == NULL)
+                return;
+
+        const Fl_Menu_Item* picked = menu_widget->mvalue();
+        if (picked == NULL)
+                return;
+
+        const char* picked_label = picked->label();
+        if (picked_label == NULL)
+                return;
+
+        std::string choice_label(picked_label);
+        if (choice_label == "Clear")
+                inp->value("");
+        else
+                inp->value(choice_label.c_str());
 }
 
 

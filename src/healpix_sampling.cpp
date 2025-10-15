@@ -90,14 +90,12 @@ void HealpixSampling::initialise(
 		initialiseSymMats(fn_sym, pgGroup, pgOrder, R_repository, L_repository);
 
 		// Set up symmetry matrices for symmetry relax
-		if (fn_sym_relax != "")
-		{
-			if (fn_sym_relax[0] != 'C' && fn_sym_relax[0] != 'c')
-				REPORT_ERROR("Sorry, symmetry relaxation is currently available only for cyclic (Cn) point groups. For other symmetries, please see https://github.com/3dem/relion/issues/796.");
-			R_repository_relax.clear();
-			L_repository_relax.clear();
-			initialiseSymMats(fn_sym_relax, pgGroupRelaxSym, pgOrderRelaxSym, R_repository_relax, L_repository_relax);
-		}
+                if (fn_sym_relax != "")
+                {
+                        R_repository_relax.clear();
+                        L_repository_relax.clear();
+                        initialiseSymMats(fn_sym_relax, pgGroupRelaxSym, pgOrderRelaxSym, R_repository_relax, L_repository_relax);
+                }
 	}
 	else
 	{
@@ -1051,13 +1049,25 @@ void HealpixSampling::selectOrientationsWithNonZeroPriorProbability(
 
 	} // end for ipsi
 	// Normalise the prior probability distribution to have sum 1 over all psi-angles
-	for (long int ipsi = 0; ipsi < psi_prior.size(); ipsi++)
-	{
-		if (sigma_psi_from_zero > 0.)
-			psi_prior[ipsi] /= sumprior_withsigmafromzero;
-		else
-			psi_prior[ipsi] /= sumprior;
-	}
+        for (long int ipsi = 0; ipsi < psi_prior.size(); ipsi++)
+        {
+                if (sigma_psi_from_zero > 0.)
+                        psi_prior[ipsi] /= sumprior_withsigmafromzero;
+                else
+                        psi_prior[ipsi] /= sumprior;
+        }
+
+        if (isRelax && pointer_psi_nonzeroprior.size() > 0 && pointer_psi_nonzeroprior.size() < psi_angles.size())
+        {
+                pointer_psi_nonzeroprior.clear();
+                psi_prior.clear();
+                RFLOAT uniform_prior = 1. / psi_angles.size();
+                for (size_t ipsi = 0; ipsi < psi_angles.size(); ++ipsi)
+                {
+                        pointer_psi_nonzeroprior.push_back(static_cast<int>(ipsi));
+                        psi_prior.push_back(uniform_prior);
+                }
+        }
 
 	// If there were no directions at all, just select the single nearest one:
 	if (psi_prior.size() == 0)
@@ -1502,8 +1512,20 @@ void HealpixSampling::selectOrientationsWithNonZeroPriorProbabilityFor3DHelicalR
 		}
 	}
 	// Normalise the prior probability distribution to have sum 1 over all psi-angles
-	for (long int ipsi = 0; ipsi < psi_prior.size(); ipsi++)
-		psi_prior[ipsi] /= sumprior;
+        for (long int ipsi = 0; ipsi < psi_prior.size(); ipsi++)
+                psi_prior[ipsi] /= sumprior;
+
+        if (isRelax && pointer_psi_nonzeroprior.size() > 0 && pointer_psi_nonzeroprior.size() < psi_angles.size())
+        {
+                pointer_psi_nonzeroprior.clear();
+                psi_prior.clear();
+                RFLOAT uniform_prior = 1. / psi_angles.size();
+                for (size_t ipsi = 0; ipsi < psi_angles.size(); ++ipsi)
+                {
+                        pointer_psi_nonzeroprior.push_back(static_cast<int>(ipsi));
+                        psi_prior.push_back(uniform_prior);
+                }
+        }
 
 	// If there were no directions at all, just select the single nearest one:
 	if (psi_prior.size() == 0)
