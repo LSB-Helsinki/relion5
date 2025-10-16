@@ -391,9 +391,6 @@ public:
 
 private:
 
-    /** Mapping between selected directions and their corresponding psi indices when relaxing symmetry */
-    std::vector<int> relax_pointer_dir2psi;
-
     void selectOrientationsWithNonZeroPriorProbabilityRelaxSymmetry(
                 RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
                 RFLOAT sigma_rot, RFLOAT sigma_tilt, RFLOAT sigma_psi,
