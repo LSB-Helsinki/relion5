@@ -222,7 +222,10 @@ public:
      * Mainly useful for debugging */
     void writeAllOrientationsToBild(FileName fn_bild, std::string rgb = "1 0 0", RFLOAT size = 0.025);
     void writeNonZeroPriorOrientationsToBild(FileName fn_bild, RFLOAT rot_prior, RFLOAT tilt_prior,
-    		std::vector<int> &pointer_dir_nonzeroprior, std::string rgb = "0 0 1", RFLOAT size = 0.025);
+                std::vector<int> &pointer_dir_nonzeroprior, std::string rgb = "0 0 1", RFLOAT size = 0.025);
+
+    /** Get the psi index associated with a relaxed-symmetry direction entry */
+    long int getRelaxedPsiIndex(long int idir_index) const;
 
     /* Sjors, 9nov2015: new rot-priors for DNA-origami-bound refinements
      */
@@ -234,12 +237,12 @@ public:
      */
     // Jun 04 - Shaoda & Sjors, Bimodel psi searches for helices
     void selectOrientationsWithNonZeroPriorProbability(
-    		RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
-    		RFLOAT sigma_rot, RFLOAT sigma_tilt, RFLOAT sigma_psi,
-    		std::vector<int> &pointer_dir_nonzeroprior, std::vector<RFLOAT> &directions_prior,
-    		std::vector<int> &pointer_psi_nonzeroprior, std::vector<RFLOAT> &psi_prior,
-			bool do_bimodal_search_psi = false,
-    		RFLOAT sigma_cutoff = 3., RFLOAT sigma_tilt_from_ninety = -1., RFLOAT sigma_psi_from_zero = -1.);
+                RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
+                RFLOAT sigma_rot, RFLOAT sigma_tilt, RFLOAT sigma_psi,
+                std::vector<int> &pointer_dir_nonzeroprior, std::vector<RFLOAT> &directions_prior,
+                std::vector<int> &pointer_psi_nonzeroprior, std::vector<RFLOAT> &psi_prior,
+                        bool do_bimodal_search_psi = false,
+                RFLOAT sigma_cutoff = 3., RFLOAT sigma_tilt_from_ninety = -1., RFLOAT sigma_psi_from_zero = -1.);
 
     void selectOrientationsWithNonZeroPriorProbabilityFor3DHelicalReconstruction(
     		RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
@@ -382,11 +385,21 @@ public:
      *  width_frac determines how broad each cylinder is. frac=1 means they touch each other
      * */
     void writeBildFileOrientationalDistribution(MultidimArray<RFLOAT> &pdf_direction,
-    		FileName &fn_bild, RFLOAT R, RFLOAT offset = 0.,
-			const Matrix2D<RFLOAT> *Aorient = NULL, const Matrix1D<RFLOAT> *Acom = NULL,
-			RFLOAT Rmax_frac = 0.3, RFLOAT width_frac = 0.5);
+                FileName &fn_bild, RFLOAT R, RFLOAT offset = 0.,
+                        const Matrix2D<RFLOAT> *Aorient = NULL, const Matrix1D<RFLOAT> *Acom = NULL,
+                        RFLOAT Rmax_frac = 0.3, RFLOAT width_frac = 0.5);
 
 private:
+
+    /** Mapping between selected directions and their corresponding psi indices when relaxing symmetry */
+    std::vector<int> relax_pointer_dir2psi;
+
+    void selectOrientationsWithNonZeroPriorProbabilityRelaxSymmetry(
+                RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
+                RFLOAT sigma_rot, RFLOAT sigma_tilt, RFLOAT sigma_psi,
+                std::vector<int> &pointer_dir_nonzeroprior, std::vector<RFLOAT> &directions_prior,
+                std::vector<int> &pointer_psi_nonzeroprior, std::vector<RFLOAT> &psi_prior,
+                bool do_bimodal_search_psi, RFLOAT sigma_cutoff);
 
     /* Eliminate points from the sampling_points_vector and sampling_points_angles vectors
      * that are outside the allowed tilt range.

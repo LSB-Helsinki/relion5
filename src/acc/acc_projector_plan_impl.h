@@ -33,19 +33,23 @@ void getOrientations(HealpixSampling &sampling, long int idir, long int ipsi, in
 	my_rot.clear();
 	my_tilt.clear();
 	my_psi.clear();
-	long int my_idir, my_ipsi;
-	if (pointer_dir_nonzeroprior.size() > idir && pointer_psi_nonzeroprior.size() > ipsi)
-	{
-		// nonzeroprior vectors have been initialised, so use priors!
-		my_idir = pointer_dir_nonzeroprior[idir];
-		my_ipsi = pointer_psi_nonzeroprior[ipsi];
-	}
-	else
-	{
-		// no priors
-		my_idir = idir;
-		my_ipsi = ipsi;
-	}
+        long int my_idir = idir;
+        long int my_ipsi = ipsi;
+        if (sampling.isRelax && pointer_dir_nonzeroprior.size() > idir)
+        {
+                my_idir = pointer_dir_nonzeroprior[idir];
+                long int mapped_psi = sampling.getRelaxedPsiIndex(idir);
+                if (mapped_psi >= 0)
+                        my_ipsi = mapped_psi;
+                else if (pointer_psi_nonzeroprior.size() > ipsi)
+                        my_ipsi = pointer_psi_nonzeroprior[ipsi];
+        }
+        else if (pointer_dir_nonzeroprior.size() > idir && pointer_psi_nonzeroprior.size() > ipsi)
+        {
+                // nonzeroprior vectors have been initialised, so use priors!
+                my_idir = pointer_dir_nonzeroprior[idir];
+                my_ipsi = pointer_psi_nonzeroprior[ipsi];
+        }
 
 	if (oversampling_order == 0)
 	{

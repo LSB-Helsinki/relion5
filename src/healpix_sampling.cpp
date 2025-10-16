@@ -36,9 +36,10 @@ void HealpixSampling::clear()
 	rot_angles.clear();
 	tilt_angles.clear();
 	psi_angles.clear();
-	translations_x.clear();
-	translations_y.clear();
-	translations_z.clear();
+        translations_x.clear();
+        translations_y.clear();
+        translations_z.clear();
+        relax_pointer_dir2psi.clear();
 	L_repository.clear();
 	R_repository.clear();
 	L_repository_relax.clear();
@@ -90,14 +91,12 @@ void HealpixSampling::initialise(
 		initialiseSymMats(fn_sym, pgGroup, pgOrder, R_repository, L_repository);
 
 		// Set up symmetry matrices for symmetry relax
-		if (fn_sym_relax != "")
-		{
-			if (fn_sym_relax[0] != 'C' && fn_sym_relax[0] != 'c')
-				REPORT_ERROR("Sorry, symmetry relaxation is currently available only for cyclic (Cn) point groups. For other symmetries, please see https://github.com/3dem/relion/issues/796.");
-			R_repository_relax.clear();
-			L_repository_relax.clear();
-			initialiseSymMats(fn_sym_relax, pgGroupRelaxSym, pgOrderRelaxSym, R_repository_relax, L_repository_relax);
-		}
+                if (fn_sym_relax != "")
+                {
+                        R_repository_relax.clear();
+                        L_repository_relax.clear();
+                        initialiseSymMats(fn_sym_relax, pgGroupRelaxSym, pgOrderRelaxSym, R_repository_relax, L_repository_relax);
+                }
 	}
 	else
 	{
@@ -692,18 +691,289 @@ RFLOAT HealpixSampling::calculateDeltaRot(Matrix1D<RFLOAT> my_direction, RFLOAT 
 	return fabs(ASIND(my_rot_direction(1)));
 }
 
+long int HealpixSampling::getRelaxedPsiIndex(long int idir_index) const
+{
+        if (idir_index >= 0 && idir_index < (long int)relax_pointer_dir2psi.size())
+                return relax_pointer_dir2psi[idir_index];
+
+        return -1;
+}
+
+void HealpixSampling::selectOrientationsWithNonZeroPriorProbabilityRelaxSymmetry(
+                RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
+                RFLOAT sigma_rot, RFLOAT sigma_tilt, RFLOAT sigma_psi,
+                std::vector<int> &pointer_dir_nonzeroprior, std::vector<RFLOAT> &directions_prior,
+                std::vector<int> &pointer_psi_nonzeroprior, std::vector<RFLOAT> &psi_prior,
+                bool do_bimodal_search_psi, RFLOAT sigma_cutoff)
+{
+        (void)do_bimodal_search_psi;
+        pointer_dir_nonzeroprior.clear();
+        directions_prior.clear();
+        pointer_psi_nonzeroprior.clear();
+        psi_prior.clear();
+        relax_pointer_dir2psi.clear();
+
+        if (!is_3D || R_repository_relax.empty())
+        {
+                // Fallback to default behaviour if symmetry relaxation cannot be applied
+                return;
+        }
+
+        // Ensure at least one psi prior entry so downstream code still evaluates orientations
+        pointer_psi_nonzeroprior.push_back(0);
+        psi_prior.push_back(1.);
+
+        Matrix1D<RFLOAT> base_prior_direction;
+        Euler_angles2direction(prior_rot, prior_tilt, base_prior_direction);
+        Matrix2D<RFLOAT> base_prior_matrix;
+        Euler_angles2matrix(prior_rot, prior_tilt, prior_psi, base_prior_matrix);
+
+        RFLOAT min_radius = 360. / (6 * ROUND(std::pow(2., healpix_order)));
+        RFLOAT biggest_sigma = XMIPP_MAX(sigma_rot, sigma_tilt);
+        RFLOAT radius = (biggest_sigma > 0.) ? sigma_cutoff * biggest_sigma : min_radius;
+        if (radius < min_radius)
+                radius = min_radius;
+        RFLOAT angular_sampling = DEG2RAD(radius);
+
+        bool any_added = false;
+        RFLOAT global_best_dir_diff = 1e9;
+        long int global_best_dir = -1;
+        RFLOAT global_best_psi_diff = 1e9;
+        long int global_best_psi = -1;
+
+        auto findDirectionIndex = [&](long int ipix) -> long int
+        {
+                for (long int idir = 0; idir < (long int)directions_ipix.size(); idir++)
+                {
+                        if (directions_ipix[idir] == ipix)
+                                return idir;
+                }
+                return -1;
+        };
+
+        for (size_t isym = 0; isym < R_repository_relax.size(); isym++)
+        {
+                Matrix1D<RFLOAT> prior_direction;
+                prior_direction = L_repository_relax[isym] * (base_prior_direction.transpose() * R_repository_relax[isym]).transpose();
+
+                Matrix2D<RFLOAT> prior_matrix;
+                prior_matrix = L_repository_relax[isym] * (base_prior_matrix * R_repository_relax[isym]).transpose();
+                prior_matrix = prior_matrix.transpose();
+
+                std::vector<long int> dir_candidates;
+                std::vector<RFLOAT> dir_weights;
+                RFLOAT dir_sum = 0.;
+
+                Matrix1D<RFLOAT> current_direction;
+                RFLOAT best_local_dir_diff = 1e9;
+                long int best_local_dir = -1;
+
+                RFLOAT alpha, beta;
+                Euler_direction2angles(prior_direction, alpha, beta);
+                alpha = DEG2RAD(alpha);
+                beta  = DEG2RAD(beta);
+                pointing prior_pointing(beta, alpha);
+                std::vector<int> listpix;
+                healpix_base.query_disc(prior_pointing, angular_sampling, listpix);
+
+                if (listpix.empty())
+                {
+                        // If no neighbours are found within the radius, fall back to scanning all directions
+                        for (long int idir = 0; idir < (long int)rot_angles.size(); idir++)
+                        {
+                                Euler_angles2direction(rot_angles[idir], tilt_angles[idir], current_direction);
+                                RFLOAT diffang = ACOSD(dotProduct(prior_direction, current_direction));
+                                if (diffang > 180.)
+                                        diffang = ABS(diffang - 360.);
+                                if (diffang < best_local_dir_diff)
+                                {
+                                        best_local_dir_diff = diffang;
+                                        best_local_dir = idir;
+                                }
+                                if (biggest_sigma > 0. && diffang < sigma_cutoff * biggest_sigma)
+                                {
+                                        RFLOAT prior_val = gaussian1D(diffang, biggest_sigma, 0.);
+                                        dir_candidates.push_back(idir);
+                                        dir_weights.push_back(prior_val);
+                                        dir_sum += prior_val;
+                                }
+                        }
+                }
+                else
+                {
+                        for (size_t j = 0; j < listpix.size(); j++)
+                        {
+                                long int idir = findDirectionIndex(listpix[j]);
+                                if (idir < 0)
+                                        continue;
+
+                                Euler_angles2direction(rot_angles[idir], tilt_angles[idir], current_direction);
+                                RFLOAT diffang = ACOSD(dotProduct(prior_direction, current_direction));
+                                if (diffang > 180.)
+                                        diffang = ABS(diffang - 360.);
+                                if (diffang < best_local_dir_diff)
+                                {
+                                        best_local_dir_diff = diffang;
+                                        best_local_dir = idir;
+                                }
+                                if (biggest_sigma > 0. && diffang < sigma_cutoff * biggest_sigma)
+                                {
+                                        RFLOAT prior_val = gaussian1D(diffang, biggest_sigma, 0.);
+                                        dir_candidates.push_back(idir);
+                                        dir_weights.push_back(prior_val);
+                                        dir_sum += prior_val;
+                                }
+                        }
+                }
+
+                if (best_local_dir < 0)
+                {
+                        for (long int idir = 0; idir < (long int)rot_angles.size(); idir++)
+                        {
+                                Euler_angles2direction(rot_angles[idir], tilt_angles[idir], current_direction);
+                                RFLOAT diffang = ACOSD(dotProduct(prior_direction, current_direction));
+                                if (diffang > 180.)
+                                        diffang = ABS(diffang - 360.);
+                                if (diffang < best_local_dir_diff)
+                                {
+                                        best_local_dir_diff = diffang;
+                                        best_local_dir = idir;
+                                }
+                        }
+                }
+
+                if (best_local_dir_diff < global_best_dir_diff && best_local_dir >= 0)
+                {
+                        global_best_dir_diff = best_local_dir_diff;
+                        global_best_dir = best_local_dir;
+                }
+
+                if (dir_candidates.empty() && best_local_dir >= 0)
+                {
+                        dir_candidates.push_back(best_local_dir);
+                        dir_weights.push_back(1.);
+                        dir_sum = 1.;
+                }
+
+                RFLOAT new_prior_rot, new_prior_tilt, new_prior_psi;
+                Euler_matrix2angles(prior_matrix, new_prior_rot, new_prior_tilt, new_prior_psi);
+                if (new_prior_psi < 0.)
+                        new_prior_psi += 360.;
+
+                std::vector<long int> psi_candidates;
+                std::vector<RFLOAT> psi_weights;
+                RFLOAT psi_sum = 0.;
+                RFLOAT best_local_psi_diff = 1e9;
+                long int best_local_psi = -1;
+
+                for (long int ipsi = 0; ipsi < (long int)psi_angles.size(); ipsi++)
+                {
+                        RFLOAT diffpsi = ABS(psi_angles[ipsi] - new_prior_psi);
+                        if (diffpsi > 180.)
+                                diffpsi = ABS(diffpsi - 360.);
+                        if (diffpsi < best_local_psi_diff)
+                        {
+                                best_local_psi_diff = diffpsi;
+                                best_local_psi = ipsi;
+                        }
+                        if (sigma_psi > 0. && diffpsi < sigma_cutoff * sigma_psi)
+                        {
+                                RFLOAT prior_val = gaussian1D(diffpsi, sigma_psi, 0.);
+                                psi_candidates.push_back(ipsi);
+                                psi_weights.push_back(prior_val);
+                                psi_sum += prior_val;
+                        }
+                }
+
+                if (best_local_psi_diff < global_best_psi_diff && best_local_psi >= 0)
+                {
+                        global_best_psi_diff = best_local_psi_diff;
+                        global_best_psi = best_local_psi;
+                }
+
+                if (psi_candidates.empty() && best_local_psi >= 0)
+                {
+                        psi_candidates.push_back(best_local_psi);
+                        psi_weights.push_back(1.);
+                        psi_sum = 1.;
+                }
+
+                if (dir_sum <= 0. || psi_sum <= 0.)
+                        continue;
+
+                for (size_t id = 0; id < dir_candidates.size(); id++)
+                {
+                        RFLOAT dir_weight_norm = dir_weights[id] / dir_sum;
+                        for (size_t ip = 0; ip < psi_candidates.size(); ip++)
+                        {
+                                RFLOAT psi_weight_norm = psi_weights[ip] / psi_sum;
+                                RFLOAT combined = dir_weight_norm * psi_weight_norm;
+                                pointer_dir_nonzeroprior.push_back(dir_candidates[id]);
+                                relax_pointer_dir2psi.push_back(psi_candidates[ip]);
+                                directions_prior.push_back(combined);
+                                any_added = true;
+                        }
+                }
+        }
+
+        if (!any_added)
+        {
+                        pointer_dir_nonzeroprior.clear();
+                        directions_prior.clear();
+                        relax_pointer_dir2psi.clear();
+                        pointer_psi_nonzeroprior.clear();
+                        psi_prior.clear();
+
+                        long int fallback_dir = (global_best_dir >= 0) ? global_best_dir : 0;
+                        long int fallback_psi = (global_best_psi >= 0) ? global_best_psi : 0;
+
+                        pointer_dir_nonzeroprior.push_back(fallback_dir);
+                        relax_pointer_dir2psi.push_back(fallback_psi);
+                        directions_prior.push_back(1.);
+                        pointer_psi_nonzeroprior.push_back(0);
+                        psi_prior.push_back(1.);
+                        return;
+        }
+
+        RFLOAT total = 0.;
+        for (size_t i = 0; i < directions_prior.size(); i++)
+                total += directions_prior[i];
+
+        if (total <= 0.)
+                total = 1.;
+
+        for (size_t i = 0; i < directions_prior.size(); i++)
+                directions_prior[i] /= total;
+
+        // Ensure psi prior remains normalised
+        psi_prior[0] = 1.;
+}
+
 void HealpixSampling::selectOrientationsWithNonZeroPriorProbability(
-		RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
-		RFLOAT sigma_rot, RFLOAT sigma_tilt, RFLOAT sigma_psi,
-    	std::vector<int> &pointer_dir_nonzeroprior, std::vector<RFLOAT> &directions_prior,
-    	std::vector<int> &pointer_psi_nonzeroprior, std::vector<RFLOAT> &psi_prior,
-		bool do_bimodal_search_psi,
+                RFLOAT prior_rot, RFLOAT prior_tilt, RFLOAT prior_psi,
+                RFLOAT sigma_rot, RFLOAT sigma_tilt, RFLOAT sigma_psi,
+        std::vector<int> &pointer_dir_nonzeroprior, std::vector<RFLOAT> &directions_prior,
+        std::vector<int> &pointer_psi_nonzeroprior, std::vector<RFLOAT> &psi_prior,
+                bool do_bimodal_search_psi,
 		RFLOAT sigma_cutoff, RFLOAT sigma_tilt_from_ninety, RFLOAT sigma_psi_from_zero)
 {
-	pointer_dir_nonzeroprior.clear();
-	directions_prior.clear();
-	// Do not check the mates again
-	std::vector<bool> idir_flag(rot_angles.size(), false);
+        pointer_dir_nonzeroprior.clear();
+        directions_prior.clear();
+        relax_pointer_dir2psi.clear();
+        // Do not check the mates again
+        std::vector<bool> idir_flag(rot_angles.size(), false);
+
+        if (isRelax)
+        {
+                selectOrientationsWithNonZeroPriorProbabilityRelaxSymmetry(prior_rot, prior_tilt, prior_psi,
+                                sigma_rot, sigma_tilt, sigma_psi,
+                                pointer_dir_nonzeroprior, directions_prior,
+                                pointer_psi_nonzeroprior, psi_prior,
+                                do_bimodal_search_psi, sigma_cutoff);
+                if (directions_prior.size() > 0)
+                        return;
+                // If the relaxed selection failed to provide any orientations, fall back to default behaviour
+        }
 
 	if (is_3D)
 	{
@@ -1153,11 +1423,12 @@ void HealpixSampling::selectOrientationsWithNonZeroPriorProbabilityFor3DHelicalR
 	RFLOAT prior_psi_flip_ratio_thres_min = 0.01;
 	RFLOAT prior_rot_flip_ratio_thres_min = 0.01; 	// KThurber
 
-	pointer_dir_nonzeroprior.clear();
-	directions_prior.clear();
+        pointer_dir_nonzeroprior.clear();
+        directions_prior.clear();
+        relax_pointer_dir2psi.clear();
 
-	if (is_3D)
-	{
+        if (is_3D)
+        {
 		// If tilt prior is less than 20 or larger than 160 degrees, print a warning message
 		//if (fabs(((prior_tilt / 180.) - ROUND(prior_tilt / 180.)) * 180.) < 20.)
 		//{
@@ -1834,27 +2105,31 @@ void HealpixSampling::getOrientations(long int idir, long int ipsi, int oversamp
 		std::vector<int> &pointer_dir_nonzeroprior, std::vector<RFLOAT> &directions_prior,
 		std::vector<int> &pointer_psi_nonzeroprior, std::vector<RFLOAT> &psi_prior)
 {
-	my_rot.clear();
-	my_tilt.clear();
-	my_psi.clear();
-	long int my_idir, my_ipsi;
-	if (pointer_dir_nonzeroprior.size() > idir && pointer_psi_nonzeroprior.size() > ipsi)
-	{
-		// nonzeroprior vectors have been initialised, so use priors!
-		my_idir = pointer_dir_nonzeroprior[idir];
-		my_ipsi = pointer_psi_nonzeroprior[ipsi];
-	}
-	else
-	{
-		// no priors
-		my_idir = idir;
-		my_ipsi = ipsi;
-	}
+        my_rot.clear();
+        my_tilt.clear();
+        my_psi.clear();
+        long int my_idir = idir;
+        long int my_ipsi = ipsi;
+        if (isRelax && pointer_dir_nonzeroprior.size() > idir)
+        {
+                my_idir = pointer_dir_nonzeroprior[idir];
+                long int mapped_psi = getRelaxedPsiIndex(idir);
+                if (mapped_psi >= 0)
+                        my_ipsi = mapped_psi;
+                else if (pointer_psi_nonzeroprior.size() > ipsi)
+                        my_ipsi = pointer_psi_nonzeroprior[ipsi];
+        }
+        else if (pointer_dir_nonzeroprior.size() > idir && pointer_psi_nonzeroprior.size() > ipsi)
+        {
+                // nonzeroprior vectors have been initialised, so use priors!
+                my_idir = pointer_dir_nonzeroprior[idir];
+                my_ipsi = pointer_psi_nonzeroprior[ipsi];
+        }
 
 #ifdef DEBUG_CHECKSIZES
-		if (my_idir >= rot_angles.size())
-		{
-			std::cerr<< "my_idir= "<<my_idir<<" rot_angles.size()= "<< rot_angles.size() <<std::endl;
+                if (my_idir >= rot_angles.size())
+                {
+                        std::cerr<< "my_idir= "<<my_idir<<" rot_angles.size()= "<< rot_angles.size() <<std::endl;
 			REPORT_ERROR("my_idir >= rot_angles.size()");
 		}
 		if (my_ipsi >= psi_angles.size())
