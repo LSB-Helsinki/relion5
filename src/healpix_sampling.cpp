@@ -22,6 +22,16 @@
 //#define DEBUG_CHECKSIZES
 //#define DEBUG_HELICAL_ORIENTATIONAL_SEARCH
 
+namespace
+{
+thread_local std::vector<int> tls_relax_pointer_dir2psi;
+
+inline std::vector<int> &relaxPointerDir2Psi()
+{
+        return tls_relax_pointer_dir2psi;
+}
+} // namespace
+
 void HealpixSampling::clear()
 {
 	is_3D = false;
@@ -39,7 +49,7 @@ void HealpixSampling::clear()
         translations_x.clear();
         translations_y.clear();
         translations_z.clear();
-        relax_pointer_dir2psi.clear();
+        relaxPointerDir2Psi().clear();
 	L_repository.clear();
 	R_repository.clear();
 	L_repository_relax.clear();
@@ -693,6 +703,7 @@ RFLOAT HealpixSampling::calculateDeltaRot(Matrix1D<RFLOAT> my_direction, RFLOAT 
 
 long int HealpixSampling::getRelaxedPsiIndex(long int idir_index) const
 {
+        const std::vector<int> &relax_pointer_dir2psi = relaxPointerDir2Psi();
         if (idir_index >= 0 && idir_index < (long int)relax_pointer_dir2psi.size())
                 return relax_pointer_dir2psi[idir_index];
 
@@ -711,6 +722,7 @@ void HealpixSampling::selectOrientationsWithNonZeroPriorProbabilityRelaxSymmetry
         directions_prior.clear();
         pointer_psi_nonzeroprior.clear();
         psi_prior.clear();
+        std::vector<int> &relax_pointer_dir2psi = relaxPointerDir2Psi();
         relax_pointer_dir2psi.clear();
 
         if (!is_3D || R_repository_relax.empty())
@@ -959,7 +971,7 @@ void HealpixSampling::selectOrientationsWithNonZeroPriorProbability(
 {
         pointer_dir_nonzeroprior.clear();
         directions_prior.clear();
-        relax_pointer_dir2psi.clear();
+        relaxPointerDir2Psi().clear();
         // Do not check the mates again
         std::vector<bool> idir_flag(rot_angles.size(), false);
 
@@ -1425,7 +1437,7 @@ void HealpixSampling::selectOrientationsWithNonZeroPriorProbabilityFor3DHelicalR
 
         pointer_dir_nonzeroprior.clear();
         directions_prior.clear();
-        relax_pointer_dir2psi.clear();
+        relaxPointerDir2Psi().clear();
 
         if (is_3D)
         {
