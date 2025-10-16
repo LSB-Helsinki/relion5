@@ -4060,7 +4060,7 @@ void MlOptimiser::expectationSetupCheckMemory(int myverb)
         {
             std::cout << " Oversampling= " << oversampling << " NrHiddenVariableSamplingPoints= " << mymodel.nr_classes * sampling.NrSamplingPoints(oversampling, &pointer_dir_nonzeroprior, &pointer_psi_nonzeroprior) << std::endl;
             if (sampling.fn_sym_relax != "")
-                std::cout<<"Relaxing symmetry to "<<sampling.fn_sym_relax<<std::endl;
+                std::cout << " Relaxing " << sampling.fn_sym_relax << " symmetry" << std::endl;
             int nr_orient = (do_only_sample_tilt) ? sampling.NrDirections(oversampling, &pointer_dir_nonzeroprior) : sampling.NrDirections(oversampling, &pointer_dir_nonzeroprior) * sampling.NrPsiSamplings(oversampling, &pointer_psi_nonzeroprior);
             if (do_skip_rotate || do_skip_align)
                 nr_orient = 1;
