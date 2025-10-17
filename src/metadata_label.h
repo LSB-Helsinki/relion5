@@ -321,12 +321,15 @@ enum EMDLabel
 	EMDL_MLMODEL_PIXEL_SIZE,
 	EMDL_MLMODEL_POWER_REF,
 	EMDL_MLMODEL_PRIOR_MODE,
-	EMDL_MLMODEL_SIGMA_OFFSET, // deprecated
-	EMDL_MLMODEL_SIGMA_OFFSET_ANGSTROM,
-	EMDL_MLMODEL_SIGMA_ROT,
-	EMDL_MLMODEL_SIGMA_TILT,
-	EMDL_MLMODEL_SIGMA_PSI,
-	EMDL_MLMODEL_REF_IMAGE,
+        EMDL_MLMODEL_SIGMA_OFFSET, // deprecated
+        EMDL_MLMODEL_SIGMA_OFFSET_ANGSTROM,
+        EMDL_MLMODEL_SIGMA_ROT,
+        EMDL_MLMODEL_SIGMA_TILT,
+        EMDL_MLMODEL_SIGMA_PSI,
+        EMDL_MLMODEL_SIGMA_ROT_PRIOR_INPUT,
+        EMDL_MLMODEL_SIGMA_TILT_PRIOR_INPUT,
+        EMDL_MLMODEL_SIGMA_PSI_PRIOR_INPUT,
+        EMDL_MLMODEL_REF_IMAGE,
 	EMDL_MLMODEL_GRADIENT_MOMENT1_IMAGE,
 	EMDL_MLMODEL_GRADIENT_MOMENT2_IMAGE,
 	EMDL_MLMODEL_SIGMA2_NOISE,
@@ -1056,10 +1059,13 @@ private:
 		EMDL::addLabel(EMDL_MLMODEL_SIGMA_OFFSET_ANGSTROM, EMDL_DOUBLE, "rlnSigmaOffsetsAngst","Standard deviation in the origin offsets (in Angstroms)");
 		EMDL::addLabel(EMDL_MLMODEL_SIGMA2_NOISE, EMDL_DOUBLE, "rlnSigma2Noise", "Spherical average of the standard deviation in the noise (sigma)");
 		EMDL::addLabel(EMDL_MLMODEL_SIGMA2_REF, EMDL_DOUBLE, "rlnReferenceSigma2", "Spherical average of the estimated power in the noise of a reference");
-		EMDL::addLabel(EMDL_MLMODEL_SIGMA_ROT, EMDL_DOUBLE, "rlnSigmaPriorRotAngle", "Standard deviation of the prior on the rot (i.e. first Euler) angle");
-		EMDL::addLabel(EMDL_MLMODEL_SIGMA_TILT, EMDL_DOUBLE, "rlnSigmaPriorTiltAngle", "Standard deviation of the prior on the tilt (i.e. second Euler) angle");
-		EMDL::addLabel(EMDL_MLMODEL_SIGMA_PSI, EMDL_DOUBLE, "rlnSigmaPriorPsiAngle", "Standard deviation of the prior on the psi (i.e. third Euler) angle");
-		EMDL::addLabel(EMDL_MLMODEL_SSNR_REF, EMDL_DOUBLE, "rlnSignalToNoiseRatio", "Spectral signal-to-noise ratio for a reference");
+                EMDL::addLabel(EMDL_MLMODEL_SIGMA_ROT, EMDL_DOUBLE, "rlnSigmaPriorRotAngle", "Standard deviation of the prior on the rot (i.e. first Euler) angle");
+                EMDL::addLabel(EMDL_MLMODEL_SIGMA_TILT, EMDL_DOUBLE, "rlnSigmaPriorTiltAngle", "Standard deviation of the prior on the tilt (i.e. second Euler) angle");
+                EMDL::addLabel(EMDL_MLMODEL_SIGMA_PSI, EMDL_DOUBLE, "rlnSigmaPriorPsiAngle", "Standard deviation of the prior on the psi (i.e. third Euler) angle");
+                EMDL::addLabel(EMDL_MLMODEL_SIGMA_ROT_PRIOR_INPUT, EMDL_DOUBLE, "rlnSigmaPriorRotAngleInput", "User-provided standard deviation for the prior on the rot (i.e. first Euler) angle");
+                EMDL::addLabel(EMDL_MLMODEL_SIGMA_TILT_PRIOR_INPUT, EMDL_DOUBLE, "rlnSigmaPriorTiltAngleInput", "User-provided standard deviation for the prior on the tilt (i.e. second Euler) angle");
+                EMDL::addLabel(EMDL_MLMODEL_SIGMA_PSI_PRIOR_INPUT, EMDL_DOUBLE, "rlnSigmaPriorPsiAngleInput", "User-provided standard deviation for the prior on the psi (i.e. third Euler) angle");
+                EMDL::addLabel(EMDL_MLMODEL_SSNR_REF, EMDL_DOUBLE, "rlnSignalToNoiseRatio", "Spectral signal-to-noise ratio for a reference");
 		EMDL::addLabel(EMDL_MLMODEL_TAU2_FUDGE_FACTOR, EMDL_DOUBLE, "rlnTau2FudgeFactor", "Regularisation parameter with which estimates for the power in the references will be multiplied (T in original paper)");
 		EMDL::addLabel(EMDL_MLMODEL_TAU2_REF, EMDL_DOUBLE, "rlnReferenceTau2", "Spherical average of the estimated power in the signal of a reference");
 

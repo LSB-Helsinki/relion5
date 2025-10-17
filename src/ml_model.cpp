@@ -138,11 +138,18 @@ void MlModel::read(FileName fn_in, int nr_optics_groups_from_mydata, bool _do_gr
 	    !MDlog.getValue(EMDL_MLMODEL_AVE_PMAX, ave_Pmax) )
 		REPORT_ERROR("MlModel::readStar: incorrect model_general table");
 
-	if (!MDlog.getValue(EMDL_MLMODEL_SIGMA_OFFSET_ANGSTROM, sigma2_offset))
-	{
-		if (MDlog.getValue(EMDL_MLMODEL_SIGMA_OFFSET, sigma2_offset))
-		{
-			sigma2_offset *= pixel_size;
+        RFLOAT sigma_rot_prior_input = 0.;
+        RFLOAT sigma_tilt_prior_input = 0.;
+        RFLOAT sigma_psi_prior_input = 0.;
+        MDlog.getValue(EMDL_MLMODEL_SIGMA_ROT_PRIOR_INPUT, sigma_rot_prior_input);
+        MDlog.getValue(EMDL_MLMODEL_SIGMA_TILT_PRIOR_INPUT, sigma_tilt_prior_input);
+        MDlog.getValue(EMDL_MLMODEL_SIGMA_PSI_PRIOR_INPUT, sigma_psi_prior_input);
+
+        if (!MDlog.getValue(EMDL_MLMODEL_SIGMA_OFFSET_ANGSTROM, sigma2_offset))
+        {
+                if (MDlog.getValue(EMDL_MLMODEL_SIGMA_OFFSET, sigma2_offset))
+                {
+                        sigma2_offset *= pixel_size;
 		}
 		else
 		{
@@ -201,10 +208,13 @@ void MlModel::read(FileName fn_in, int nr_optics_groups_from_mydata, bool _do_gr
 	// Take inverse again of current resolution:
 	current_resolution = 1. / current_resolution;
 
-	sigma2_offset *= sigma2_offset;
-	sigma2_rot *= sigma2_rot;
-	sigma2_tilt *= sigma2_tilt;
-	sigma2_psi *= sigma2_psi;
+        sigma2_offset *= sigma2_offset;
+        sigma2_rot *= sigma2_rot;
+        sigma2_tilt *= sigma2_tilt;
+        sigma2_psi *= sigma2_psi;
+        sigma2_rot_prior_input = sigma_rot_prior_input > 0. ? sigma_rot_prior_input * sigma_rot_prior_input : 0.;
+        sigma2_tilt_prior_input = sigma_tilt_prior_input > 0. ? sigma_tilt_prior_input * sigma_tilt_prior_input : 0.;
+        sigma2_psi_prior_input = sigma_psi_prior_input > 0. ? sigma_psi_prior_input * sigma_psi_prior_input : 0.;
 
 	// Resize vectors
 	initialise(_do_grad, _pseudo_halfsets);
@@ -653,13 +663,16 @@ void MlModel::write(FileName fn_out, HealpixSampling &sampling, bool do_write_bi
 	MDlog.setValue(EMDL_MLMODEL_NR_OPTICS_GROUPS, nr_optics_groups);
 	MDlog.setValue(EMDL_MLMODEL_TAU2_FUDGE_FACTOR, tau2_fudge_factor);
 	MDlog.setValue(EMDL_MLMODEL_NORM_CORRECTION_AVG, avg_norm_correction);
-	MDlog.setValue(EMDL_MLMODEL_SIGMA_OFFSET_ANGSTROM, sqrt(sigma2_offset));
-	MDlog.setValue(EMDL_MLMODEL_PRIOR_MODE, orientational_prior_mode);
-	MDlog.setValue(EMDL_MLMODEL_SIGMA_ROT, sqrt(sigma2_rot));
-	MDlog.setValue(EMDL_MLMODEL_SIGMA_TILT, sqrt(sigma2_tilt));
-	MDlog.setValue(EMDL_MLMODEL_SIGMA_PSI, sqrt(sigma2_psi));
-	MDlog.setValue(EMDL_MLMODEL_LL, LL);
-	MDlog.setValue(EMDL_MLMODEL_AVE_PMAX, ave_Pmax);
+        MDlog.setValue(EMDL_MLMODEL_SIGMA_OFFSET_ANGSTROM, sqrt(sigma2_offset));
+        MDlog.setValue(EMDL_MLMODEL_PRIOR_MODE, orientational_prior_mode);
+        MDlog.setValue(EMDL_MLMODEL_SIGMA_ROT, sqrt(sigma2_rot));
+        MDlog.setValue(EMDL_MLMODEL_SIGMA_TILT, sqrt(sigma2_tilt));
+        MDlog.setValue(EMDL_MLMODEL_SIGMA_PSI, sqrt(sigma2_psi));
+        MDlog.setValue(EMDL_MLMODEL_SIGMA_ROT_PRIOR_INPUT, sqrt(sigma2_rot_prior_input));
+        MDlog.setValue(EMDL_MLMODEL_SIGMA_TILT_PRIOR_INPUT, sqrt(sigma2_tilt_prior_input));
+        MDlog.setValue(EMDL_MLMODEL_SIGMA_PSI_PRIOR_INPUT, sqrt(sigma2_psi_prior_input));
+        MDlog.setValue(EMDL_MLMODEL_LL, LL);
+        MDlog.setValue(EMDL_MLMODEL_AVE_PMAX, ave_Pmax);
 	MDlog.write(fh);
 
 	// Calculate resolutions and total Fourier coverages for each class
