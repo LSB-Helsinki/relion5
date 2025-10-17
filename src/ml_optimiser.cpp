@@ -738,6 +738,7 @@ void MlOptimiser::parseInitial(int argc, char **argv)
         // the sigma-values for the orientational prior are in model (and not in sampling) because one might like to estimate them
         // from the data by calculating weighted sums of all angular differences: therefore it needs to be in wsum_model and thus in mymodel.
         mymodel.sigma2_rot = mymodel.sigma2_tilt = mymodel.sigma2_psi = _sigma_ang * _sigma_ang;
+        mymodel.sigma2_rot_prior_input = mymodel.sigma2_tilt_prior_input = mymodel.sigma2_psi_prior_input = mymodel.sigma2_rot;
     }
     else if (_sigma_rot > 0. || _sigma_tilt > 0. || _sigma_psi > 0.)
     {
@@ -745,6 +746,9 @@ void MlOptimiser::parseInitial(int argc, char **argv)
         mymodel.sigma2_rot  = (_sigma_rot > 0. ) ? _sigma_rot * _sigma_rot   : 0.;
         mymodel.sigma2_tilt = (_sigma_tilt > 0.) ? _sigma_tilt * _sigma_tilt : 0.;
         mymodel.sigma2_psi  = (_sigma_psi > 0. ) ? _sigma_psi * _sigma_psi   : 0.;
+        mymodel.sigma2_rot_prior_input  = (_sigma_rot > 0.)  ? mymodel.sigma2_rot  : 0.;
+        mymodel.sigma2_tilt_prior_input = (_sigma_tilt > 0.) ? mymodel.sigma2_tilt : 0.;
+        mymodel.sigma2_psi_prior_input  = (_sigma_psi > 0.)  ? mymodel.sigma2_psi  : 0.;
     }
     else
     {
@@ -755,11 +759,13 @@ void MlOptimiser::parseInitial(int argc, char **argv)
             mymodel.orientational_prior_mode = PRIOR_ROTTILT_PSI;
             _sigma_ang = 0.0033;
             mymodel.sigma2_rot = mymodel.sigma2_tilt = mymodel.sigma2_psi = _sigma_ang * _sigma_ang;
+            mymodel.sigma2_rot_prior_input = mymodel.sigma2_tilt_prior_input = mymodel.sigma2_psi_prior_input = mymodel.sigma2_rot;
         }
         else
         {
             mymodel.orientational_prior_mode = NOPRIOR;
             mymodel.sigma2_rot = mymodel.sigma2_tilt = mymodel.sigma2_psi = 0.;
+            mymodel.sigma2_rot_prior_input = mymodel.sigma2_tilt_prior_input = mymodel.sigma2_psi_prior_input = 0.;
         }
     }
     do_skip_align = parser.checkOption("--skip_align", "Skip orientational assignment (only classify)?");
@@ -2358,7 +2364,8 @@ void MlOptimiser::initialiseGeneral(int rank)
     {
         // Aug20,2015 - Shaoda, Helical refinement
         RFLOAT rottilt_step = sampling.getAngularSampling(adaptive_oversampling);
-        mymodel.sigma2_rot = getHelicalSigma2Rot(helical_rise_initial, helical_twist_initial, sampling.helical_offset_step, rottilt_step, mymodel.sigma2_rot);
+        if (mymodel.sigma2_rot_prior_input <= 0.)
+            mymodel.sigma2_rot = getHelicalSigma2Rot(helical_rise_initial, helical_twist_initial, sampling.helical_offset_step, rottilt_step, mymodel.sigma2_rot);
     }
 
     if (particle_diameter < 0.)
@@ -9899,6 +9906,9 @@ void MlOptimiser::updateAngularSampling(bool myverb)
                 bool do_local_searches_helical = ((do_auto_refine || do_auto_sampling) && (do_helical_refine) &&
                         (sampling.healpix_order >= autosampling_hporder_local_searches));
 
+                if (sampling.offset_range_ori > 0.)
+                    new_range = XMIPP_MIN(new_range, sampling.offset_range_ori);
+
                 // Don't go to coarse angular samplings. Then just keep doing as it was
                 if (new_step > sampling.offset_step)
                 {
@@ -9922,13 +9932,37 @@ void MlOptimiser::updateAngularSampling(bool myverb)
                 {
                     // Switch ON local angular searches
                     mymodel.orientational_prior_mode = PRIOR_ROTTILT_PSI;
-                    mymodel.sigma2_rot = mymodel.sigma2_psi = 2. * 2. * new_rottilt_step * new_rottilt_step;
-                    if (!(do_helical_refine && helical_keep_tilt_prior_fixed))
-                        mymodel.sigma2_tilt = mymodel.sigma2_rot;
+                    RFLOAT auto_sigma2 = 2. * 2. * new_rottilt_step * new_rottilt_step;
+                    bool has_rot_prior = (mymodel.sigma2_rot_prior_input > 0.);
+                    bool has_tilt_prior = (mymodel.sigma2_tilt_prior_input > 0.);
+                    bool has_psi_prior = (mymodel.sigma2_psi_prior_input > 0.);
 
-                    // Aug20,2015 - Shaoda, Helical refinement
-                    if ( (do_helical_refine) && (!ignore_helical_symmetry) )
-                        mymodel.sigma2_rot = getHelicalSigma2Rot(helical_rise_initial, helical_twist_initial, sampling.helical_offset_step, new_rottilt_step, mymodel.sigma2_rot);
+                    if (has_rot_prior)
+                    {
+                        mymodel.sigma2_rot = mymodel.sigma2_rot_prior_input;
+                    }
+                    else
+                    {
+                        mymodel.sigma2_rot = auto_sigma2;
+                        // Aug20,2015 - Shaoda, Helical refinement
+                        if ( (do_helical_refine) && (!ignore_helical_symmetry) )
+                            mymodel.sigma2_rot = getHelicalSigma2Rot(helical_rise_initial, helical_twist_initial, sampling.helical_offset_step, new_rottilt_step, mymodel.sigma2_rot);
+                    }
+
+                    if (!(do_helical_refine && helical_keep_tilt_prior_fixed))
+                    {
+                        if (has_tilt_prior)
+                            mymodel.sigma2_tilt = mymodel.sigma2_tilt_prior_input;
+                        else if (has_rot_prior)
+                            mymodel.sigma2_tilt = mymodel.sigma2_rot_prior_input;
+                        else
+                            mymodel.sigma2_tilt = mymodel.sigma2_rot;
+                    }
+
+                    if (has_psi_prior)
+                        mymodel.sigma2_psi = mymodel.sigma2_psi_prior_input;
+                    else
+                        mymodel.sigma2_psi = auto_sigma2;
                 }
             }
         }

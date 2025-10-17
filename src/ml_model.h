@@ -161,14 +161,19 @@ public:
 	// Mode for orientational prior distributions
 	int orientational_prior_mode;
 
-	// Variance in rot angle for the orientational pdf
-	RFLOAT sigma2_rot;
+        // Variance in rot angle for the orientational pdf
+        RFLOAT sigma2_rot;
 
-	// Variance in tilt angle for the orientational pdf
-	RFLOAT sigma2_tilt;
+        // Variance in tilt angle for the orientational pdf
+        RFLOAT sigma2_tilt;
 
-	// Variance in psi angle for the orientational pdf
-	RFLOAT sigma2_psi;
+        // Variance in psi angle for the orientational pdf
+        RFLOAT sigma2_psi;
+
+        // User-provided variances for the orientational pdf (remain zero when not provided)
+        RFLOAT sigma2_rot_prior_input;
+        RFLOAT sigma2_tilt_prior_input;
+        RFLOAT sigma2_psi_prior_input;
 
 	// Stddev in tilt angle for the orientational pdf of each body
 	std::vector<RFLOAT> sigma_tilt_bodies;
@@ -261,10 +266,13 @@ public:
 		avg_norm_correction(0),
 		sigma2_offset(0),
 		tau2_fudge_factor(0),
-		orientational_prior_mode(0),
-		sigma2_rot(0),
-		sigma2_tilt(0),
-		sigma2_psi(0),
+                orientational_prior_mode(0),
+                sigma2_rot(0),
+                sigma2_tilt(0),
+                sigma2_psi(0),
+                sigma2_rot_prior_input(0),
+                sigma2_tilt_prior_input(0),
+                sigma2_psi_prior_input(0),
 		is_helix(0),
 		helical_nr_asu(1),
 		helical_twist_min(0),
@@ -316,10 +324,13 @@ public:
 			avg_norm_correction = MD.avg_norm_correction;
 			sigma2_offset = MD.sigma2_offset;
 			tau2_fudge_factor = MD.tau2_fudge_factor;
-			orientational_prior_mode = MD.orientational_prior_mode;
-			sigma2_rot = MD.sigma2_rot;
-			sigma2_tilt = MD.sigma2_tilt;
-			sigma2_psi = MD.sigma2_psi;
+                        orientational_prior_mode = MD.orientational_prior_mode;
+                        sigma2_rot = MD.sigma2_rot;
+                        sigma2_tilt = MD.sigma2_tilt;
+                        sigma2_psi = MD.sigma2_psi;
+                        sigma2_rot_prior_input = MD.sigma2_rot_prior_input;
+                        sigma2_tilt_prior_input = MD.sigma2_tilt_prior_input;
+                        sigma2_psi_prior_input = MD.sigma2_psi_prior_input;
 			is_helix = MD.is_helix;
 			helical_nr_asu = MD.helical_nr_asu;
 			helical_twist_min = MD.helical_twist_min;
@@ -402,7 +413,8 @@ public:
 		ref_dim = data_dim = ori_size = nr_classes = nr_bodies = nr_groups = nr_directions = interpolator = r_min_nn;
 		padding_factor = 0.;
 		ave_Pmax = avg_norm_correction = LL = sigma2_offset = tau2_fudge_factor = 0.;
-		sigma2_rot = sigma2_tilt = sigma2_psi = 0.;
+                sigma2_rot = sigma2_tilt = sigma2_psi = 0.;
+                sigma2_rot_prior_input = sigma2_tilt_prior_input = sigma2_psi_prior_input = 0.;
 		acc_rot.clear();
 		acc_trans.clear();
 		estimated_resolution.clear();

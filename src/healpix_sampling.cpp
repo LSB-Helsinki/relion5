@@ -318,19 +318,21 @@ void HealpixSampling::setTranslations(
 	old_offset_step = offset_step;  // can be < 0 ??????
 	old_offset_range = offset_range;  // can be < 0 ??????
 	old_helical_offset_step = helical_offset_step;  // can be < 0
-	if ( (new_offset_step > 0.) && (new_offset_range >= 0.) )
-	{
-		offset_step = new_offset_step;
-		offset_range = new_offset_range;
-	}
-	else
-	{
-		if (!(offset_step > 0.))
-		{
-			std::cerr << " offset_range= " << offset_range << " offset_step= " << offset_step << std::endl;
-			REPORT_ERROR("HealpixSampling::setTranslations BUG %% Trying to set translations with uninitialised offset_step!");
-		}
-	}
+        if ( (new_offset_step > 0.) && (new_offset_range >= 0.) )
+        {
+                offset_step = new_offset_step;
+                offset_range = new_offset_range;
+        }
+        else
+        {
+                if (!(offset_step > 0.))
+                {
+                        std::cerr << " offset_range= " << offset_range << " offset_step= " << offset_step << std::endl;
+                        REPORT_ERROR("HealpixSampling::setTranslations BUG %% Trying to set translations with uninitialised offset_step!");
+                }
+        }
+        if (offset_range_ori > 0. && offset_range > offset_range_ori)
+                offset_range = offset_range_ori;
 	// Sometimes new offsets are set to -1, that means the old offsets remain unchanged.
 	new_offset_step = offset_step;  // > 0
 	new_offset_range = offset_range;  // >= 0

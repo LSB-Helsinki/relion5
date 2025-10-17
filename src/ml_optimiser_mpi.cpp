@@ -3796,21 +3796,45 @@ void MlOptimiserMpi::updateAngularSamplingGrad(long int my_first_part_id, long i
 			smallest_changes_optimal_orientations = 999.;
 
 			// If the angular sampling is smaller than autosampling_hporder_local_searches, then use local searches of +/- 6 times the angular sampling
-			if (mymodel.ref_dim == 3 && new_healpix_order >= autosampling_hporder_local_searches)
-			{
-				RFLOAT new_rottilt_step = 360. / (6 * ROUND(std::pow(2., new_healpix_order + adaptive_oversampling)));
-				// Switch ON local angular searches
-				mymodel.orientational_prior_mode = PRIOR_ROTTILT_PSI;
-				mymodel.sigma2_rot = mymodel.sigma2_psi = 2. * 2. * new_rottilt_step * new_rottilt_step;
-				if (!(do_helical_refine && helical_keep_tilt_prior_fixed))
-					mymodel.sigma2_tilt = mymodel.sigma2_rot;
+                        if (mymodel.ref_dim == 3 && new_healpix_order >= autosampling_hporder_local_searches)
+                        {
+                                RFLOAT new_rottilt_step = 360. / (6 * ROUND(std::pow(2., new_healpix_order + adaptive_oversampling)));
+                                // Switch ON local angular searches
+                                mymodel.orientational_prior_mode = PRIOR_ROTTILT_PSI;
+                                RFLOAT auto_sigma2 = 2. * 2. * new_rottilt_step * new_rottilt_step;
+                                bool has_rot_prior = (mymodel.sigma2_rot_prior_input > 0.);
+                                bool has_tilt_prior = (mymodel.sigma2_tilt_prior_input > 0.);
+                                bool has_psi_prior = (mymodel.sigma2_psi_prior_input > 0.);
 
-				// Aug20,2015 - Shaoda, Helical refinement
-				if ((do_helical_refine) && (!ignore_helical_symmetry))
-					mymodel.sigma2_rot = getHelicalSigma2Rot(helical_rise_initial, helical_twist_initial,
-					                                         sampling.helical_offset_step, new_rottilt_step,
-					                                         mymodel.sigma2_rot);
-			}
+                                if (has_rot_prior)
+                                {
+                                        mymodel.sigma2_rot = mymodel.sigma2_rot_prior_input;
+                                }
+                                else
+                                {
+                                        mymodel.sigma2_rot = auto_sigma2;
+                                        // Aug20,2015 - Shaoda, Helical refinement
+                                        if ((do_helical_refine) && (!ignore_helical_symmetry))
+                                                mymodel.sigma2_rot = getHelicalSigma2Rot(helical_rise_initial, helical_twist_initial,
+                                                                                         sampling.helical_offset_step, new_rottilt_step,
+                                                                                         mymodel.sigma2_rot);
+                                }
+
+                                if (!(do_helical_refine && helical_keep_tilt_prior_fixed))
+                                {
+                                        if (has_tilt_prior)
+                                                mymodel.sigma2_tilt = mymodel.sigma2_tilt_prior_input;
+                                        else if (has_rot_prior)
+                                                mymodel.sigma2_tilt = mymodel.sigma2_rot_prior_input;
+                                        else
+                                                mymodel.sigma2_tilt = mymodel.sigma2_rot;
+                                }
+
+                                if (has_psi_prior)
+                                        mymodel.sigma2_psi = mymodel.sigma2_psi_prior_input;
+                                else
+                                        mymodel.sigma2_psi = auto_sigma2;
+                        }
 
 			// Reset iteration counter
 			nr_iter_wo_resol_gain = 0;
